@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>史诗远征：二万五千里长征画卷</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        /* 页面全局：古风宣纸底色 */
+        body { margin: 0; padding: 0; font-family: 'STKaiti', 'KaiTi', 'Microsoft YaHei', serif; background-color: #d1bfae; color: #3e2723; overflow: hidden; }
+        
+        /* 左侧：画卷文字面板区 */
+        #story { 
+            position: absolute; top: 0; left: 0; width: 40%; height: 100vh; overflow-y: scroll; 
+            z-index: 1000; scroll-behavior: smooth;
+            border-right: 12px solid #b8860b; 
+            box-shadow: 15px 0 30px rgba(0,0,0,0.6);
+            background: linear-gradient(to right, #d1bfae 0%, #e0cebe 50%, #c4b09c 100%);
+        }
+        #story::-webkit-scrollbar { display: none; } 
+        
+        .step { padding: 40vh 8% 40vh 8%; opacity: 0.2; transition: opacity 0.8s ease-in-out; }
+        .step.active { opacity: 1; }
+        
+        /* 故事卡片 */
+        .content-box { 
+            position: relative;
+            background: rgba(245, 238, 226, 0.95); 
+            padding: 35px; 
+            border-radius: 2px; 
+            border: 1px solid #8b5a2b; 
+            border-top: 4px solid #da251d; 
+            border-bottom: 4px solid #da251d; 
+            box-shadow: 5px 8px 20px rgba(62, 39, 35, 0.5); 
+            overflow: hidden; 
+        }
+        /* 红星背景水印 */
+        .content-box::before {
+            content: "★"; position: absolute; top: -30px; right: -20px; font-size: 180px; 
+            color: rgba(218, 37, 29, 0.05); z-index: 0; transform: rotate(15deg); pointer-events: none;
+        }
+        .content-box > * { position: relative; z-index: 1; }
+
+        h2 { color: #da251d; margin-top: 0; font-size: 30px; border-bottom: 2px dashed #b8860b; padding-bottom: 10px;}
+        p { line-height: 2.0; font-size: 19px; color: #3e2723; text-align: justify; letter-spacing: 1px;}
+        .highlight { color: #da251d; font-weight: bold; }
+
+        /* ---------------- 新增：历史老照片样式 ---------------- */
+        .history-photo {
+            width: 100%; /* 图片宽度自适应卡片 */
+            height: 220px; /* 固定高度，保持排版整洁 */
+            object-fit: cover; /* 保证图片不拉伸变形 */
+            margin: 15px 0;
+            border: 6px solid #eaddcf; /* 仿相纸白边 */
+            outline: 1px solid #8b5a2b; /* 最外层细线 */
+            border-radius: 2px;
+            box-shadow: 3px 4px 10px rgba(0,0,0,0.4);
+            /* 黑科技：给所有插入的图片加上泛黄、做旧、高对比的老照片滤镜 */
+            filter: sepia(0.6) grayscale(0.5) contrast(1.2) brightness(0.9);
+            transition: transform 0.3s;
+        }
+        /* 鼠标悬停时图片微微放大，增加交互感 */
+        .history-photo:hover {
+            transform: scale(1.02);
+            filter: sepia(0.2) grayscale(0.2) contrast(1.1) brightness(1);
+        }
+        
+        /* 右侧：全屏画卷地图区 */
+        #map { position: fixed; top: 0; right: 0; width: 60%; height: 100vh; z-index: 1; background-color: #d1bfae;}
+        .leaflet-layer { filter: sepia(90%) hue-rotate(-15deg) saturate(160%) brightness(85%) contrast(125%); }
+        #map::after {
+            content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            box-shadow: inset 0 0 150px rgba(62, 39, 35, 0.8), inset 0 0 50px rgba(90, 50, 20, 0.5);
+            pointer-events: none; z-index: 1000;
+        }
+
+        /* 封面 */
+        .cover { height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; background: url('data:image/svg+xml;utf8,<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="2" fill="rgba(139,90,43,0.1)"/></svg>'); margin-bottom: 15vh; padding: 0 5%;}
+        .cover h1 { font-size: 60px; color: #da251d; margin-bottom: 10px; text-shadow: 2px 2px 0px #eaddcf, 4px 4px 0px rgba(0,0,0,0.3); letter-spacing: 8px;}
+        .cover p { font-size: 26px; color: #5d4037; font-weight: bold; letter-spacing: 3px;}
+        .scroll-tip { margin-top: 80px; font-size: 18px; color: #da251d; animation: bounce 2s infinite; font-weight: bold; }
+        @keyframes bounce { 0%, 20%, 50%, 80%, 100% {transform: translateY(0);} 40% {transform: translateY(-10px);} 60% {transform: translateY(-5px);} }
+        
+        /* 五角星弹窗样式 */
+        .leaflet-popup-content-wrapper { background: rgba(245, 238, 226, 0.95); border: 2px solid #b8860b; border-radius: 4px; box-shadow: 2px 2px 10px rgba(0,0,0,0.5);}
+        .leaflet-popup-tip { background: rgba(245, 238, 226, 0.95); border: 2px solid #b8860b; border-top: none; border-left: none;}
+        .leaflet-popup-content b { color: #da251d; font-size: 16px; }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <div id="story">
+        <div class="cover">
+            <h1>史诗远征</h1>
+            <p>长征：二万五千里的地球红飘带</p>
+            <div class="scroll-tip">▼ 滑动滚轮，展开历史画卷 ▼</div>
+        </div>
+
+        <div class="step" data-step="1">
+            <div class="content-box">
+                <h2>第一卷：血染湘江</h2>
+                <img class="history-photo" src="https://gd-hbimg.huaban.com/e03c31f39bd5d6df7d0aac058505734db3eb7431471b9-E1CDR4_fw658" alt="湍急的江水，象征湘江战役">
+                <p><strong>时间：</strong>1934年10月 - 11月</p>
+                <p><strong>地点：</strong>江西瑞金 至 广西湘江流域</p>
+                <p>11月下旬，中央红军在<span class="highlight">湘江</span>两岸与国民党重兵展开惨烈血战。面对敌人的飞机大炮和重重封锁，红军将士赴汤蹈火。鲜血染红了江水，中央红军从出发时的 8.6 万人锐减至 3 万余人，这是长征中最惨痛、最悲壮的一役。</p>
+            </div>
+        </div>
+
+        <div class="step" data-step="2">
+            <div class="content-box">
+                <h2>第二卷：生死转折</h2>
+                <img class="history-photo" src="https://ts1.tc.mm.bing.net/th/id/R-C.3f6a38d11824daf81fdd3210d40fd443?rik=KIe9ilqzD8Cj4w&riu=http%3a%2f%2fszb.eyesnews.cn%2fpc%2fpic%2f202501%2f02%2ffe061108-8e66-4a40-92d5-83114edca206.jpg.1&ehk=1x76sbFQyDAXdIOKYNiyaPWUq4Uerc4QPnWZwaaw5QE%3d&risl=&pid=ImgRaw&r=0" alt="古建筑，象征遵义会议旧址">
+                <p><strong>时间：</strong>1935年1月</p>
+                <p><strong>地点：</strong>贵州遵义</p>
+                <p>湘江战役后，红军向敌人兵力薄弱的贵州进军。1935年1月，红军攻克黔北重镇<span class="highlight">遵义</span>。在此召开的遵义会议，在极其危急的关头挽救了党和红军，成为中国共产党历史上一个生死攸关的转折点。</p>
+            </div>
+        </div>
+
+        <div class="step" data-step="3">
+            <div class="content-box">
+                <h2>第三卷：绝地求生</h2>
+                <img class="history-photo" src="https://k.sinaimg.cn/www/dy/slidenews/1_img/2016_42/45272_741208_404182.jpg/w640slw.jpg" alt="连绵的雪山，象征夹金山">
+                <p><strong>时间：</strong>1935年6月 - 8月</p>
+                <p><strong>地点：</strong>四川西部（夹金山、松潘草地）</p>
+                <p>跳出包围圈后，红军面临大自然最残酷的考验。看右侧地图那高耸的褶皱——那是海拔4000多米、终年积雪的<span class="highlight">夹金山</span>。战士们穿着单衣草鞋，在极寒缺氧中攀爬。</p>
+                <img class="history-photo" src="https://ts1.tc.mm.bing.net/th/id/R-C.a8da0245c6299c87e82f3bd90d45e03f?rik=Hdty0bvjPk2XAQ&riu=http%3a%2f%2fn.sinaimg.cn%2fsinacn20191128ac%2f500%2fw1200h900%2f20191128%2f6fa4-iixntzz9872502.jpg&ehk=Xv8Hz6snb1F5LXf3oyQFZ7FfMjRQO4MDPafnfvYxCmE%3d&risl=&pid=ImgRaw&r=0" alt="湿地沼泽，象征松潘草地" style="margin-top: 5px;">
+                <p>翻过雪山后，又踏入了荒无人烟、暗流涌动的<span class="highlight">松潘水草地</span>。饥饿与泥沼吞噬了无数年轻的生命。</p>
+            </div>
+        </div>
+
+        <div class="step" data-step="4">
+            <div class="content-box">
+                <h2>第四卷：长征万岁</h2>
+                <img class="history-photo" src="https://x0.ifengimg.com/res/2019/32D6E937B82CA8A02150E7F5BD4AFA78C485F524_size258_w1920_h1080.jpeg" alt="黄土高原的苍茫大地">
+                <p><strong>时间：</strong>1935年10月</p>
+                <p><strong>地点：</strong>陕北吴起镇</p>
+                <p>纵横十一个省，长驱二万五千里。1935年10月，中央红军终于到达<span class="highlight">陕北吴起镇</span>。黄土高原的窑洞见证了这场跨越千山万水的伟大胜利。长征不仅是一次军事上的战略转移，更是一座不可磨灭的精神丰碑。</p>
+            </div>
+        </div>
+        
+        <div style="height: 40vh;"></div>
+    </div>
+
+    <script>
+        // 地图与坐标初始化等逻辑不变
+        var map = L.map('map', { zoomControl: false, scrollWheelZoom: false, dragging: false }).setView([25.88, 116.03], 6);
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri'
+        }).addTo(map);
+
+        var redStarIcon = L.divIcon({ 
+            className: 'custom-star-icon', 
+            html: '<div style="color: #da251d; font-size: 36px; text-shadow: 2px 2px 5px rgba(0,0,0,0.8); -webkit-text-stroke: 1.5px #fbc02d; line-height: 1;">★</div>', 
+            iconSize: [36, 36], 
+            iconAnchor: [18, 18],
+            popupAnchor: [0, -18]
+        });
+        
+        var coords = {
+            ruijin: [25.88, 116.03],   // 瑞金
+            xiangjiang: [25.96, 110.98], // 湘江
+            zunyi: [27.69, 106.92],    // 遵义
+            xueshan: [30.85, 102.68],  // 夹金山
+            caodi: [32.64, 102.50],    // 松潘草地
+            wuqi: [36.92, 108.18]      // 吴起镇
+        };
+
+        var currentLines = [];
+        var currentMarkers = [];
+
+        function clearMap() {
+            currentLines.forEach(l => map.removeLayer(l));
+            currentMarkers.forEach(m => map.removeLayer(m));
+            currentLines = []; currentMarkers = [];
+        }
+
+        function drawRoute(latlngs) {
+            var borderLine = L.polyline(latlngs, {color: '#fbc02d', weight: 8, opacity: 0.6}).addTo(map);
+            var mainLine = L.polyline(latlngs, {color: '#da251d', weight: 4, opacity: 0.9, dashArray: '8, 8'}).addTo(map);
+            currentLines.push(borderLine, mainLine);
+        }
+
+        // 滚动推演逻辑
+        const steps = document.querySelectorAll('.step');
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    steps.forEach(s => s.classList.remove('active'));
+                    entry.target.classList.add('active');
+
+                    let stepIndex = entry.target.getAttribute('data-step');
+
+                    if (stepIndex == '1') {
+                        clearMap();
+                        map.flyTo([25.5, 113.5], 7, { duration: 2 });
+                        setTimeout(() => {
+                            let m1 = L.marker(coords.ruijin, {icon: redStarIcon}).addTo(map).bindPopup("<b>瑞金出发</b><br>二万五千里征程起点").openPopup();
+                            let m2 = L.marker(coords.xiangjiang, {icon: redStarIcon}).addTo(map).bindPopup("<b>血战湘江</b>");
+                            currentMarkers.push(m1, m2);
+                            drawRoute([coords.ruijin, coords.xiangjiang]);
+                        }, 2000);
+                    } 
+                    else if (stepIndex == '2') {
+                        clearMap();
+                        map.flyTo([26.5, 108.5], 7, { duration: 2 });
+                        setTimeout(() => {
+                            let m = L.marker(coords.zunyi, {icon: redStarIcon}).addTo(map).bindPopup("<b>遵义会议</b><br>历史的伟大转折").openPopup();
+                            currentMarkers.push(m);
+                            drawRoute([coords.ruijin, coords.xiangjiang, coords.zunyi]);
+                        }, 2000);
+                    } 
+                    else if (stepIndex == '3') {
+                        clearMap();
+                        map.flyTo([31.0, 103.0], 7, { duration: 2.5 });
+                        setTimeout(() => {
+                            let m1 = L.marker(coords.xueshan, {icon: redStarIcon}).addTo(map).bindPopup("<b>翻越夹金山</b>");
+                            let m2 = L.marker(coords.caodi, {icon: redStarIcon}).addTo(map).bindPopup("<b>跋涉松潘草地</b>");
+                            currentMarkers.push(m1, m2);
+                            drawRoute([coords.zunyi, [27.8, 105.0], [29.5, 102.2], coords.xueshan, coords.caodi]);
+                        }, 2500);
+                    }
+                    else if (stepIndex == '4') {
+                        clearMap();
+                        map.flyTo([31.5, 108.0], 5, { duration: 3 });
+                        setTimeout(() => {
+                            let m = L.marker(coords.wuqi, {icon: redStarIcon}).addTo(map).bindPopup("<b>吴起镇会师</b><br>地球的红飘带").openPopup();
+                            currentMarkers.push(m);
+                            drawRoute([coords.ruijin, coords.xiangjiang, coords.zunyi, [27.8, 105.0], [29.5, 102.2], coords.xueshan, coords.caodi, [34.0, 104.5], coords.wuqi]);
+                        }, 3000);
+                    }
+                }
+            });
+        }, { rootMargin: '-40% 0px -40% 0px' });
+
+        steps.forEach(step => observer.observe(step));
+    </script>
+</body>
+</html>
